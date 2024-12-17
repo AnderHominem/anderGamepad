@@ -3,6 +3,9 @@ import board
 import digitalio
 import usb_hid
 import analogio
+import busio
+import adafruit_adxl34x
+
 
 from adafruit_hid.keyboard import Keyboard
 from adafruit_hid.keycode import Keycode
@@ -11,7 +14,7 @@ from adafruit_hid.mouse import Mouse
 # Initialize HID devices
 keyboard = Keyboard(usb_hid.devices)
 mouse = Mouse(usb_hid.devices)
-joysticks = Keyboard(usb_hid.devices)
+#joysticks = Keyboard(usb_hid.devices)
 
 # Define keypad matrix pins
 keypad_rows = [board.D0, board.D1, board.D2, board.D3, board.D4]
@@ -63,6 +66,7 @@ def scankeys():
                     
                     if isinstance(key_action, int):  # Keycode
                         keyboard.press(key_action)
+                        
                     if key_action in [Mouse.LEFT_BUTTON, Mouse.RIGHT_BUTTON]:
                         mouse.press(key_action)
 
@@ -107,11 +111,11 @@ counter = 0
 
 #___________________Joystiks Function______________________
 
-DEFAULT_UP = 26536
-DEFAULT_DOWN = 39000
+DEFAULT_UP = 29536
+DEFAULT_DOWN = 35000
 
-ACTIVE_UP = 15536
-ACTIVE_DOWN = 50000
+ACTIVE_UP = 20536
+ACTIVE_DOWN = 45000
 
 # Helper function to read joystick axis value
 def read_axis(axis):
@@ -138,12 +142,31 @@ r_down_action = (Keycode.DOWN_ARROW)
 r_right_action = (Keycode.RIGHT_ARROW)
 r_left_action = (Keycode.LEFT_ARROW)
 
+#_____________________Giro to mouse________________________
+
+# Initialize the shared I2C bus
+i2c = busio.I2C(scl=board.D9, sda=board.D8)
+
+# Initialize two ADXL345 sensors with different addresses
+accelerometer_left = adafruit_adxl34x.ADXL345(i2c)
+accelerometer_right = adafruit_adxl34x.ADXL345(i2c, address=0x53)
+
+left_x, left_y, left_z = accelerometer_left.acceleration
+right_x, right_y, right_z = accelerometer_right.acceleration      
+    
+SENSITIVITY = 10.0  # Adjust this value for faster or slower mouse movement
+
 #___________________Working State______________________
 while True:
+    
+#_____________________Giro to mouse________________________
+    
+  
     
 #___________________Keypad Matrix Function______________________
     scankeys()
     time.sleep(0.01)  # Small delay to reduce CPU usage
+    
 #___________________Rotary Encoder Function______________________
     # Read the current state of the CLK pin
     current_clk_value = clk.value
@@ -179,27 +202,27 @@ while True:
     if l_y_value <= ACTIVE_UP:
         l_joystick_key_pressed.add(l_right_action)  # Add W key for "up"  
     elif l_y_value >= DEFAULT_UP:
-        joysticks.release(l_right_action)
+        keyboard.release(l_right_action)
     
     if l_y_value >= ACTIVE_DOWN:
         l_joystick_key_pressed.add(l_left_action)  # Add S key for "down"
     elif l_y_value <= DEFAULT_DOWN:
-        joysticks.release(l_left_action)
+        keyboard.release(l_left_action)
 
 # Detect X-axis movement (A and D keys)
     if l_x_value <= ACTIVE_UP:
         l_joystick_key_pressed.add(l_up_action)  # Add A key for "left"
     elif l_x_value >= DEFAULT_UP:
-        joysticks.release(l_up_action)
+        keyboard.release(l_up_action)
     
     if l_x_value >= ACTIVE_DOWN:
         l_joystick_key_pressed.add(l_down_action)  # Add D key for "right"
     elif l_x_value <= DEFAULT_DOWN:
-        joysticks.release(l_down_action)
+        keyboard.release(l_down_action)
 
 # Press the keys currently in the `pressed_keys` set
     for key in l_joystick_key_pressed:
-        joysticks.press(key)
+        keyboard.press(key)
 
 #_____________________Right joystick________________________    
 
@@ -214,26 +237,26 @@ while True:
     if r_y_value <= ACTIVE_UP:
         r_joystick_key_pressed.add(r_right_action)  # Add W key for "up"  
     elif r_y_value >= DEFAULT_UP:
-        joysticks.release(r_right_action)
+        keyboard.release(r_right_action)
     
     if r_y_value >= ACTIVE_DOWN:
         r_joystick_key_pressed.add(r_left_action)  # Add S key for "down"
     elif r_y_value <= DEFAULT_DOWN:
-        joysticks.release(r_left_action)
+        keyboard.release(r_left_action)
 
 # Detect X-axis movement (A and D keys)
     if r_x_value <= ACTIVE_UP:
         r_joystick_key_pressed.add(r_down_action)  # Add A key for "left"
     elif r_x_value >= DEFAULT_UP:
-        joysticks.release(r_down_action)
+        keyboard.release(r_down_action)
     
     if r_x_value >= ACTIVE_DOWN:
         r_joystick_key_pressed.add(r_up_action)  # Add D key for "right"
     elif r_x_value <= DEFAULT_DOWN:
-        joysticks.release(r_up_action)
+        keyboard.release(r_up_action)
 
 # Press the keys currently in the `pressed_keys` set
     for key in r_joystick_key_pressed:
-        joysticks.press(key)
+        keyboard.press(key)
     
     time.sleep(0.01)  # Small delay to reduce CPU usage
