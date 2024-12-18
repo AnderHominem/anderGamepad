@@ -5,6 +5,7 @@ import usb_hid
 import analogio
 import busio
 import adafruit_adxl34x
+import pwmio
 
 
 from adafruit_hid.keyboard import Keyboard
@@ -16,18 +17,40 @@ keyboard = Keyboard(usb_hid.devices)
 mouse = Mouse(usb_hid.devices)
 #joysticks = Keyboard(usb_hid.devices)
 
+#___________________LED Controll______________________
+
+
+# Define the RGB LED pins
+RED_PIN = board.D15
+GREEN_PIN = board.D14
+BLUE_PIN = board.D13
+
+# Set up PWM for each pin (0-65535 duty cycle)
+red = pwmio.PWMOut(RED_PIN, frequency=1000, duty_cycle=0)
+green = pwmio.PWMOut(GREEN_PIN, frequency=1000, duty_cycle=0)
+blue = pwmio.PWMOut(BLUE_PIN, frequency=1000, duty_cycle=0)
+
+def set_color(r, g, b):
+    #Set the RGB LED color with PWM values (0-65535)
+    red.duty_cycle = r
+    green.duty_cycle = g
+    blue.duty_cycle = b
+# Define a default LED color (e.g., white: R=255, G=255, B=255)
+DEFAULT_COLOR = (0, 0, 8000)
+   
 # Define keypad matrix pins
 keypad_rows = [board.D0, board.D1, board.D2, board.D3, board.D4]
 keypad_columns = [board.D19, board.D20, board.D21, board.D22]
 
 # Map key positions to HID actions
 matrix_keys = [
-    [Keycode.A, Keycode.B, Mouse.LEFT_BUTTON, Keycode.D],
-    [Keycode.E, Keycode.F, Keycode.G, Keycode.H],
-    [Keycode.I, Keycode.J, Keycode.K, Keycode.L],
-    [Keycode.ONE, Mouse.RIGHT_BUTTON, Keycode.M, Keycode.N],
-    [Keycode.O, Keycode.P, Keycode.Q, Keycode.R]
+    [Keycode.F, Keycode.ONE, Mouse.RIGHT_BUTTON, Keycode.Z],
+    [Keycode.TAB, Keycode.TWO, Keycode.G, Keycode.F6],
+    [Keycode.FIVE, Keycode.THREE, Keycode.K, Keycode.F5],
+    [Keycode.LEFT_CONTROL, Mouse.LEFT_BUTTON, Keycode.X, Keycode.ENTER],
+    [Keycode.R, Keycode.FOUR, Keycode.Q, Keycode.T]
 ]
+
 
 # Create lists to hold row and column pins
 col_pins = []
@@ -49,11 +72,23 @@ for col_pin in keypad_columns:
 
 # Dictionary to keep track of pressed keys
 pressed_keys = {}
+# Variable to track if Keycode.K is pressed
+GAY_button = Keycode.K
+mouse_movement_active = False
+
+#flag to track if the LED color is already changed
+button_pressed = False
+
+
+
 
 def scankeys():
     
-    for row in range(len(row_pins)): 
-        row_pins[row].value = True   # Set the current row to high
+    global button_pressed, mouse_movement_active
+    
+    for row in range(len(row_pins)):
+        # Set the current row to high
+        row_pins[row].value = True
 
         for col in range(len(col_pins)):
             # Check if the column pin is high (key pressed)
@@ -64,11 +99,30 @@ def scankeys():
                     pressed_keys[key_action] = True
                     print("Key pressed:", key_action)
                     
+                    # Check if Keycode.K is pressed
+                    if key_action == GAY_button:
+                        mouse_movement_active = True
+                        print("giro activated")
+                                         
                     if isinstance(key_action, int):  # Keycode
                         keyboard.press(key_action)
+                                            
+                        if key_action == Keycode.G:
+                            button_pressed = True
+                            set_color(42768, 3000, 0)                    
                         
                     if key_action in [Mouse.LEFT_BUTTON, Mouse.RIGHT_BUTTON]:
                         mouse.press(key_action)
+                        if key_action == Mouse.LEFT_BUTTON:
+                            button_pressed = True
+                            set_color(32768, 0, 0)
+                        if key_action == Mouse.RIGHT_BUTTON:
+                            button_pressed = True
+                            set_color(0, 32768, 0)
+                            
+                        
+                    #if key_action in [Mouse.LEFT_BUTTON, Mouse.RIGHT_BUTTON]:
+                        #mouse.press(key_action)
 
             else:
                 # If the key was previously pressed, release it
@@ -76,14 +130,25 @@ def scankeys():
                 if key_action in pressed_keys:
                     print("Key released:", key_action)
                     pressed_keys.pop(key_action)
+                                                           
+                    # Check if Keycode.K is released
+                    if key_action == GAY_button:
+                        mouse_movement_active = False
+                        print("giro disactivated") 
                     
                     if isinstance(key_action, int):  # Keycode
                         keyboard.release(key_action)
+                        button_pressed = False
+                        
                     if key_action in [Mouse.LEFT_BUTTON, Mouse.RIGHT_BUTTON]:
                         mouse.release(key_action)
+                        button_pressed = False
+                        
+                            
 
         # Set the current row back to low
         row_pins[row].value = False
+
 
 #___________________Rotary Encoder Function______________________
 # Define GPIO pins for the rotary encoder
@@ -149,23 +214,41 @@ i2c = busio.I2C(scl=board.D9, sda=board.D8)
 
 # Initialize two ADXL345 sensors with different addresses
 accelerometer_left = adafruit_adxl34x.ADXL345(i2c)
-accelerometer_right = adafruit_adxl34x.ADXL345(i2c, address=0x53)
-
-left_x, left_y, left_z = accelerometer_left.acceleration
-right_x, right_y, right_z = accelerometer_right.acceleration      
+accelerometer_right = adafruit_adxl34x.ADXL345(i2c, address=0x53)     
     
-SENSITIVITY = 10.0  # Adjust this value for faster or slower mouse movement
+SENSITIVITY = 30.0  # Adjust this value for faster or slower mouse movement
+
+
 
 #___________________Working State______________________
 while True:
     
-#_____________________Giro to mouse________________________
-    
-  
-    
+    if not button_pressed:
+        set_color(*DEFAULT_COLOR)  # Always set to the default color    
+
 #___________________Keypad Matrix Function______________________
     scankeys()
-    time.sleep(0.01)  # Small delay to reduce CPU usage
+
+
+#_____________________Giro to mouse________________________
+    if mouse_movement_active == True:
+        # Capture the baseline state when mouse_movement_active first becomes True
+        # Read acceleration from both sensors
+        left_x, left_y, left_z = accelerometer_left.acceleration
+        right_x, right_y, right_z = accelerometer_right.acceleration
+
+        # Calculate average X and Y movements from both sensors
+        delta_x = ((left_x + right_x) / 2) * SENSITIVITY
+        delta_y = ((left_z + right_z) / 2) * SENSITIVITY
+    
+
+        # Convert to integers for mouse movement
+        mouse_x = int(-delta_x)
+        mouse_y = int(-delta_y)
+
+        # Move the mouse
+        mouse.move(x=mouse_x, y=mouse_y)
+
     
 #___________________Rotary Encoder Function______________________
     # Read the current state of the CLK pin
@@ -259,4 +342,4 @@ while True:
     for key in r_joystick_key_pressed:
         keyboard.press(key)
     
-    time.sleep(0.01)  # Small delay to reduce CPU usage
+
