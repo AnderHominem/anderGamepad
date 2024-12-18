@@ -79,7 +79,8 @@ mouse_movement_active = False
 #flag to track if the LED color is already changed
 button_pressed = False
 
-
+# List of keys that should not send keypresses
+ignored_keys = {Keycode.K}
 
 
 def scankeys():
@@ -103,6 +104,10 @@ def scankeys():
                     if key_action == GAY_button:
                         mouse_movement_active = True
                         print("giro activated")
+                        
+                    # Skip ignored keys
+                    if key_action in ignored_keys:
+                        continue
                                          
                     if isinstance(key_action, int):  # Keycode
                         keyboard.press(key_action)
@@ -134,7 +139,11 @@ def scankeys():
                     # Check if Keycode.K is released
                     if key_action == GAY_button:
                         mouse_movement_active = False
-                        print("giro disactivated") 
+                        print("giro disactivated")
+                        
+                    # Skip ignored keys
+                    if key_action in ignored_keys:
+                        continue
                     
                     if isinstance(key_action, int):  # Keycode
                         keyboard.release(key_action)
@@ -151,7 +160,7 @@ def scankeys():
 
 
 #___________________Rotary Encoder Function______________________
-# Define GPIO pins for the rotary encoder
+# Initialize the rotary encoder pins
 CLK_PIN = board.D6
 DT_PIN = board.D7
 SW_PIN = board.D5
@@ -173,6 +182,14 @@ sw.pull = digitalio.Pull.UP  # Pull-up resistor
 # Initialize variables
 previous_clk_value = clk.value
 counter = 0
+
+# Debounce delay in seconds
+DEBOUNCE_DELAY = 0.01
+last_clk_time = time.monotonic()
+
+# Minimum signal duration in seconds for filtering
+MIN_SIGNAL_DURATION = 0.05
+signal_start_time = time.monotonic()
 
 #___________________Joystiks Function______________________
 
@@ -236,6 +253,16 @@ while True:
         # Read acceleration from both sensors
         left_x, left_y, left_z = accelerometer_left.acceleration
         right_x, right_y, right_z = accelerometer_right.acceleration
+        
+            # Round the values from the left sensor to two decimal places
+        left_x = round(left_x, 2)
+        left_y = round(left_y, 2)
+        left_z = round(left_z, 2)
+
+        # Round the values from the right sensor to two decimal places
+        right_x = round(right_x, 2)
+        right_y = round(right_y, 2)
+        right_z = round(right_z, 2)
 
         # Calculate average X and Y movements from both sensors
         delta_x = ((left_x + right_x) / 2) * SENSITIVITY
@@ -254,18 +281,23 @@ while True:
     # Read the current state of the CLK pin
     current_clk_value = clk.value
 
-    # Check if the encoder is turned
-    if current_clk_value != previous_clk_value:
+    # Check if the encoder is turned and debounce
+    if current_clk_value != previous_clk_value and (time.monotonic() - last_clk_time) > DEBOUNCE_DELAY:
         if current_clk_value == 0:  # Clockwise turn
             if dt.value == 0:  # If DT is low, it's a clockwise turn
                 counter += 1
-                mouse.move(wheel=10)
+                if time.monotonic() - signal_start_time > MIN_SIGNAL_DURATION:
+                    mouse.move(wheel=5)
+                    signal_start_time = time.monotonic()  # Reset the signal timer
             else:  # If DT is high, it's a counterclockwise turn
                 counter -= 1
-                mouse.move(wheel=-10)
-                       
-        # Update previous CLK value
+                if time.monotonic() - signal_start_time > MIN_SIGNAL_DURATION:
+                    mouse.move(wheel=-5)
+                    signal_start_time = time.monotonic()  # Reset the signal timer
+
+        # Update previous CLK value and last time
         previous_clk_value = current_clk_value
+        last_clk_time = time.monotonic()
 
     # Check if the switch is pressed
     if not sw.value:  # Switch is pressed
@@ -342,4 +374,8 @@ while True:
     for key in r_joystick_key_pressed:
         keyboard.press(key)
     
+
+
+
+ 
 
